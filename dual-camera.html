@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>DualCam — दो फॉर्मेट, एक शॉट</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Rajdhani:wght@400;600;700&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111;
+    --accent: #ff3c3c;
+    --accent2: #00e5ff;
+    --text: #f0f0f0;
+    --muted: #555;
+    --rec-glow: 0 0 20px #ff3c3c88;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-x: hidden;
+    user-select: none;
+  }
+
+  /* Header */
+  header {
+    width: 100%;
+    padding: 14px 20px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #1e1e1e;
+    background: #0d0d0d;
+  }
+  header h1 {
+    font-family: 'Space Mono', monospace;
+    font-size: 18px;
+    letter-spacing: 2px;
+    color: var(--accent2);
+  }
+  header h1 span { color: var(--accent); }
+
+  #timer {
+    font-family: 'Space Mono', monospace;
+    font-size: 14px;
+    color: var(--accent);
+    display: none;
+    align-items: center;
+    gap: 6px;
+  }
+  #timer.active { display: flex; }
+  .rec-dot {
+    width: 8px; height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: blink 1s infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  /* Preview container */
+  #preview-wrap {
+    width: 100%;
+    max-width: 480px;
+    padding: 16px 16px 0;
+  }
+
+  .preview-label {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+  .preview-label span {
+    color: var(--accent2);
+    font-weight: 700;
+  }
+
+  /* Live viewfinder */
+  #viewfinder-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 9/16;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1.5px solid #222;
+  }
+  #viewfinder {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+  }
+
+  /* 16:9 crop overlay */
+  #crop-overlay {
+    position: absolute;
+    left: 0; right: 0;
+    border-top: 2px dashed var(--accent2);
+    border-bottom: 2px dashed var(--accent2);
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  #crop-label {
+    position: absolute;
+    top: 2px;
+    right: 8px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--accent2);
+    background: #00000088;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  #aspect-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    background: #000000bb;
+    color: var(--accent);
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--accent);
+    letter-spacing: 1px;
+  }
+  .rec-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    background: var(--accent);
+    color: #fff;
+    padding: 3px 8px;
+    border-radius: 4px;
+    display: none;
+    animation: recpulse 1s infinite;
+  }
+  .rec-badge.show { display: block; }
+  @keyframes recpulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+  /* Hidden canvases for recording */
+  #canvas-916, #canvas-169 { display: none; }
+
+  /* Controls */
+  #controls {
+    width: 100%;
+    max-width: 480px;
+    padding: 18px 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  /* Format info */
+  .format-row {
+    display: flex;
+    gap: 10px;
+  }
+  .format-card {
+    flex: 1;
+    background: #161616;
+    border: 1px solid #252525;
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .format-card.highlight { border-color: var(--accent2); }
+  .fc-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .fc-tag.a { color: var(--accent); }
+  .fc-tag.b { color: var(--accent2); }
+  .fc-desc {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  /* Shutter */
+  .btn-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+  }
+
+  #shutter {
+    width: 78px; height: 78px;
+    border-radius: 50%;
+    border: 4px solid var(--accent);
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.15s;
+    box-shadow: 0 0 0 0 var(--accent);
+    -webkit-tap-highlight-color: transparent;
+  }
+  #shutter::after {
+    content: '';
+    position: absolute;
+    inset: 7px;
+    background: var(--accent);
+    border-radius: 50%;
+    transition: background 0.2s, border-radius 0.3s;
+  }
+  #shutter.recording {
+    border-color: var(--accent);
+    box-shadow: var(--rec-glow);
+  }
+  #shutter.recording::after {
+    background: var(--accent);
+    border-radius: 8px;
+    inset: 14px;
+  }
+  #shutter:active { transform: scale(0.93); }
+
+  .side-btn {
+    width: 46px; height: 46px;
+    border-radius: 50%;
+    background: #1a1a1a;
+    border: 1px solid #2e2e2e;
+    color: var(--text);
+    font-size: 20px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .side-btn:active { background: #282828; }
+
+  /* Status */
+  #status {
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 1px;
+    min-height: 20px;
+    padding: 0 10px;
+  }
+  #status.ok { color: #2ecc71; }
+  #status.err { color: var(--accent); }
+
+  /* Gallery */
+  #gallery-section {
+    width: 100%;
+    max-width: 480px;
+    padding: 0 16px 30px;
+  }
+  .gallery-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #1e1e1e;
+  }
+  .gallery-header h2 {
+    font-size: 14px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+  }
+  #clear-btn {
+    font-size: 12px;
+    color: var(--accent);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 600;
+    letter-spacing: 1px;
+    display: none;
+  }
+
+  #gallery {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .clip-pair {
+    background: #111;
+    border: 1px solid #1e1e1e;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .clip-pair-header {
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #161616;
+    border-bottom: 1px solid #1e1e1e;
+  }
+  .clip-pair-header span {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .clip-pair-header .clip-num {
+    color: var(--accent2);
+    font-weight: 700;
+  }
+  .clip-videos {
+    display: flex;
+    gap: 0;
+  }
+  .clip-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .clip-item + .clip-item {
+    border-left: 1px solid #1e1e1e;
+  }
+  .clip-tag {
+    padding: 6px 10px;
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: #0d0d0d;
+  }
+  .clip-tag.t916 { color: var(--accent); }
+  .clip-tag.t169 { color: var(--accent2); }
+  .clip-item video {
+    width: 100%;
+    display: block;
+    background: #000;
+    max-height: 200px;
+    object-fit: contain;
+  }
+  .dl-btn {
+    display: block;
+    width: 100%;
+    padding: 8px;
+    background: #0d0d0d;
+    border: none;
+    border-top: 1px solid #1e1e1e;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    text-align: center;
+    transition: color 0.2s, background 0.2s;
+    letter-spacing: 1px;
+  }
+  .dl-btn:hover { color: var(--text); background: #151515; }
+  .dl-btn.a:hover { color: var(--accent); }
+  .dl-btn.b:hover { color: var(--accent2); }
+
+  #empty-msg {
+    text-align: center;
+    padding: 30px;
+    color: var(--muted);
+    font-size: 13px;
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 1px;
+    line-height: 1.8;
+  }
+
+  /* Permission screen */
+  #perm-screen {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 20px;
+    z-index: 100;
+    padding: 30px;
+  }
+  #perm-screen h2 {
+    font-size: 22px;
+    letter-spacing: 1px;
+    text-align: center;
+    color: var(--accent2);
+  }
+  #perm-screen p {
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.7;
+  }
+  #start-btn {
+    padding: 14px 36px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-family: 'Space Mono', monospace;
+    font-size: 14px;
+    cursor: pointer;
+    letter-spacing: 2px;
+    transition: opacity 0.2s;
+  }
+  #start-btn:hover { opacity: 0.85; }
+
+  .cam-icon { font-size: 50px; }
+</style>
+</head>
+<body>
+
+<!-- Permission Screen -->
+<div id="perm-screen">
+  <div class="cam-icon">📷</div>
+  <h2>DualCam</h2>
+  <p>एक बार रिकॉर्ड करें<br>दो फॉर्मेट में सेव करें<br><br><strong style="color:var(--accent)">9:16</strong> (Reels/Stories) + <strong style="color:var(--accent2)">16:9</strong> (YouTube)</p>
+  <button id="start-btn" onclick="startCamera()">CAMERA KHOLO</button>
+  <p style="font-size:12px;margin-top:-10px">Camera + Microphone permission chahiye</p>
+</div>
+
+<!-- Header -->
+<header>
+  <h1>DUAL<span>CAM</span></h1>
+  <div id="timer"><div class="rec-dot"></div><span id="timer-text">00:00</span></div>
+</header>
+
+<!-- Viewfinder -->
+<div id="preview-wrap">
+  <div class="preview-label">LIVE PREVIEW — <span>9:16 FRAME</span></div>
+  <div id="viewfinder-wrap">
+    <video id="viewfinder" autoplay playsinline muted></video>
+    <div id="crop-overlay">
+      <div id="crop-label">16:9 CROP</div>
+    </div>
+    <div id="aspect-badge">9:16</div>
+    <div class="rec-badge" id="rec-badge">● REC</div>
+  </div>
+</div>
+
+<!-- Hidden canvases -->
+<canvas id="canvas-916"></canvas>
+<canvas id="canvas-169"></canvas>
+
+<!-- Controls -->
+<div id="controls">
+  <div class="format-row">
+    <div class="format-card">
+      <div class="fc-tag a">9:16</div>
+      <div class="fc-desc">Reels, Shorts<br>Stories ke liye</div>
+    </div>
+    <div class="format-card highlight">
+      <div class="fc-tag b">16:9</div>
+      <div class="fc-desc">YouTube, Landscape<br>widescreen ke liye</div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="side-btn" id="flip-btn" onclick="flipCamera()" title="Camera Flip">🔄</button>
+    <button id="shutter" onclick="toggleRecord()"></button>
+    <button class="side-btn" id="mute-btn" onclick="toggleMute()" title="Mute">🎙️</button>
+  </div>
+
+  <div id="status">Camera ready hai...</div>
+</div>
+
+<!-- Gallery -->
+<div id="gallery-section">
+  <div class="gallery-header">
+    <h2>GALLERY</h2>
+    <button id="clear-btn" onclick="clearGallery()">सब हटाएं</button>
+  </div>
+  <div id="gallery">
+    <div id="empty-msg">अभी कोई video नहीं है<br>Record करने के लिए ● दबाएं</div>
+  </div>
+</div>
+
+<script>
+let stream = null;
+let recorder916 = null;
+let recorder169 = null;
+let chunks916 = [], chunks169 = [];
+let isRecording = false;
+let timerInterval = null;
+let elapsed = 0;
+let isFront = true;
+let isMuted = false;
+let clipCount = 0;
+let animFrame = null;
+
+const video = document.getElementById('viewfinder');
+const canvas916 = document.getElementById('canvas-916');
+const canvas169 = document.getElementById('canvas-169');
+const ctx916 = canvas916.getContext('2d');
+const ctx169 = canvas169.getContext('2d');
+
+function positionCropOverlay() {
+  const wrap = document.getElementById('viewfinder-wrap');
+  const overlay = document.getElementById('crop-overlay');
+  const ww = wrap.clientWidth;
+  const wh = wrap.clientHeight;
+  // 16:9 crop height from a 9:16 container
+  const cropH = ww * (9 / 16);
+  const topOffset = (wh - cropH) / 2;
+  overlay.style.top = topOffset + 'px';
+  overlay.style.height = cropH + 'px';
+}
+
+window.addEventListener('resize', positionCropOverlay);
+
+async function startCamera() {
+  try {
+    const constraints = {
+      video: {
+        facingMode: isFront ? 'user' : 'environment',
+        width: { ideal: 1080 },
+        height: { ideal: 1920 }
+      },
+      audio: true
+    };
+    stream = await navigator.mediaDevices.getUserMedia(constraints);
+    video.srcObject = stream;
+    video.onloadedmetadata = () => {
+      document.getElementById('perm-screen').style.display = 'none';
+      setStatus('✓ Camera ready — Record karo!', 'ok');
+      positionCropOverlay();
+    };
+  } catch(e) {
+    alert('Camera permission nahi mila: ' + e.message);
+  }
+}
+
+function setStatus(msg, type='') {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = type;
+}
+
+function toggleRecord() {
+  if (isRecording) stopRecording();
+  else startRecording();
+}
+
+function startRecording() {
+  if (!stream) return;
+
+  // Setup canvas dimensions
+  const vw = video.videoWidth || 1080;
+  const vh = video.videoHeight || 1920;
+
+  // 9:16
+  canvas916.width = vw;
+  canvas916.height = vh;
+
+  // 16:9: crop the center band
+  const cropH = Math.round(vw * 9 / 16);
+  canvas169.width = vw;
+  canvas169.height = cropH;
+
+  chunks916 = []; chunks169 = [];
+
+  // Draw loop
+  function draw() {
+    // Flip for front cam
+    if (isFront) {
+      ctx916.save(); ctx916.translate(vw, 0); ctx916.scale(-1, 1);
+      ctx916.drawImage(video, 0, 0, vw, vh);
+      ctx916.restore();
+
+      const yOff = Math.round((vh - cropH) / 2);
+      ctx169.save(); ctx169.translate(vw, 0); ctx169.scale(-1, 1);
+      ctx169.drawImage(video, 0, yOff, vw, cropH, 0, 0, vw, cropH);
+      ctx169.restore();
+    } else {
+      ctx916.drawImage(video, 0, 0, vw, vh);
+      const yOff = Math.round((vh - cropH) / 2);
+      ctx169.drawImage(video, 0, yOff, vw, cropH, 0, 0, vw, cropH);
+    }
+    animFrame = requestAnimationFrame(draw);
+  }
+  draw();
+
+  // Audio
+  const audioTracks = stream.getAudioTracks();
+  const audioStream = audioTracks.length > 0 ? new MediaStream(audioTracks) : null;
+
+  function makeRecorder(canvas, chunksArr) {
+    const canvasStream = canvas.captureStream(30);
+    if (audioStream) audioStream.getAudioTracks().forEach(t => canvasStream.addTrack(t));
+
+    const mimeTypes = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4'];
+    let mimeType = '';
+    for (const m of mimeTypes) {
+      if (MediaRecorder.isTypeSupported(m)) { mimeType = m; break; }
+    }
+
+    const rec = new MediaRecorder(canvasStream, mimeType ? { mimeType, videoBitsPerSecond: 8000000 } : {});
+    rec.ondataavailable = e => { if (e.data.size > 0) chunksArr.push(e.data); };
+    rec.start(200);
+    return rec;
+  }
+
+  recorder916 = makeRecorder(canvas916, chunks916);
+  recorder169 = makeRecorder(canvas169, chunks169);
+
+  isRecording = true;
+  document.getElementById('shutter').classList.add('recording');
+  document.getElementById('rec-badge').classList.add('show');
+  document.getElementById('timer').classList.add('active');
+  document.getElementById('flip-btn').disabled = true;
+
+  elapsed = 0;
+  timerInterval = setInterval(() => {
+    elapsed++;
+    const m = String(Math.floor(elapsed/60)).padStart(2,'0');
+    const s = String(elapsed%60).padStart(2,'0');
+    document.getElementById('timer-text').textContent = m+':'+s;
+  }, 1000);
+
+  setStatus('● Recording...', 'err');
+}
+
+function stopRecording() {
+  if (!isRecording) return;
+  cancelAnimationFrame(animFrame);
+
+  let done916 = false, done169 = false;
+
+  recorder916.onstop = () => {
+    done916 = true;
+    if (done916 && done169) saveClip();
+  };
+  recorder169.onstop = () => {
+    done169 = true;
+    if (done916 && done169) saveClip();
+  };
+
+  recorder916.stop();
+  recorder169.stop();
+
+  isRecording = false;
+  clearInterval(timerInterval);
+  document.getElementById('shutter').classList.remove('recording');
+  document.getElementById('rec-badge').classList.remove('show');
+  document.getElementById('timer').classList.remove('active');
+  document.getElementById('flip-btn').disabled = false;
+  setStatus('Saving...', '');
+}
+
+function saveClip() {
+  clipCount++;
+  const ext = chunks916[0]?.type?.includes('mp4') ? 'mp4' : 'webm';
+  const mime = chunks916[0]?.type || 'video/webm';
+
+  const blob916 = new Blob(chunks916, { type: mime });
+  const blob169 = new Blob(chunks169, { type: mime });
+  const url916 = URL.createObjectURL(blob916);
+  const url169 = URL.createObjectURL(blob169);
+  const ts = new Date().toLocaleTimeString('hi-IN');
+
+  addToGallery(clipCount, url916, url169, blob916, blob169, ext, ts);
+  setStatus(`✓ Clip #${clipCount} saved — dono formats mein!`, 'ok');
+
+  setTimeout(() => setStatus('Camera ready — Next record karo!', 'ok'), 2500);
+}
+
+function addToGallery(num, url916, url169, blob916, blob169, ext, ts) {
+  const gallery = document.getElementById('gallery');
+  const empty = document.getElementById('empty-msg');
+  if (empty) empty.remove();
+
+  document.getElementById('clear-btn').style.display = 'block';
+
+  const pair = document.createElement('div');
+  pair.className = 'clip-pair';
+  pair.innerHTML = `
+    <div class="clip-pair-header">
+      <span class="clip-num">#${String(num).padStart(2,'0')}</span>
+      <span>${ts}</span>
+    </div>
+    <div class="clip-videos">
+      <div class="clip-item">
+        <div class="clip-tag t916">9:16 <small style="color:#555;font-weight:400">Portrait</small></div>
+        <video src="${url916}" controls playsinline></video>
+        <button class="dl-btn a" onclick="downloadBlob(blob916_${num}, 'clip_${num}_9x16.${ext}')">⬇ 9:16 Download</button>
+      </div>
+      <div class="clip-item">
+        <div class="clip-tag t169">16:9 <small style="color:#555;font-weight:400">Landscape</small></div>
+        <video src="${url169}" controls playsinline></video>
+        <button class="dl-btn b" onclick="downloadBlob(blob169_${num}, 'clip_${num}_16x9.${ext}')">⬇ 16:9 Download</button>
+      </div>
+    </div>
+  `;
+
+  // Store blobs globally for download
+  window[`blob916_${num}`] = blob916;
+  window[`blob169_${num}`] = blob169;
+
+  gallery.prepend(pair);
+}
+
+function downloadBlob(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+async function flipCamera() {
+  if (isRecording) return;
+  isFront = !isFront;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  await startCamera();
+}
+
+function toggleMute() {
+  isMuted = !isMuted;
+  stream?.getAudioTracks().forEach(t => t.enabled = !isMuted);
+  document.getElementById('mute-btn').textContent = isMuted ? '🔇' : '🎙️';
+  setStatus(isMuted ? 'Mute ON' : 'Mute OFF', '');
+}
+
+function clearGallery() {
+  if (!confirm('Saari videos hatayein?')) return;
+  document.getElementById('gallery').innerHTML = '<div id="empty-msg">अभी कोई video नहीं है<br>Record करने के लिए ● दबाएं</div>';
+  document.getElementById('clear-btn').style.display = 'none';
+  clipCount = 0;
+}
+</script>
+</body>
+</html>
